@@ -1,0 +1,264 @@
+<html>
+
+<head>
+    <title>Bubbles</title>
+</head>
+
+<body>
+    <style>
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: black;
+        }
+
+        #benchmark {
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: red;
+        }
+    </style>
+    <canvas id='cv'></canvas>
+    <div id='benchmark'></div>
+    </audio>
+    <script>
+        // canvas
+        var canvas = document.getElementById('cv')
+        var pen = canvas.getContext('2d')
+        canvas.width = window.innerWidth
+        canvas.height = window.innerHeight
+
+        // helpers
+        {
+            function randrange(x, y) {
+                return x + (y - x) * Math.random()
+            }
+
+            function hsv2rgb(h, s = 0.6, v = 1) {
+                if (s == 0) return [v, v, v]
+                var i = Math.floor(h * 6),
+                    f = (h * 6) - i,
+                    p = Math.floor(v * (1 - s) * 255),
+                    q = Math.floor(v * (1 - s * f) * 255),
+                    t = Math.floor(v * (1 - s * (1 - f)) * 255)
+                v = Math.floor(255 * v)
+                i = ((i % 6) + 6) % 6
+                switch (i) {
+                    case 0:
+                        return [v, t, p]
+                    case 1:
+                        return [q, v, p]
+                    case 2:
+                        return [p, v, t]
+                    case 3:
+                        return [p, q, v]
+                    case 4:
+                        return [t, p, v]
+                    case 5:
+                        return [v, p, q]
+                }
+            }
+        }
+
+        // config
+        {
+            NPARTICLE = 20
+            RANDV = 50
+            RR1 = 30; RR2 = 100
+            MINR = 30
+            BUBBLE_ALPHA = 0.2
+            TL1 = 10; TL2 = 60;
+            DHUE = 0.05
+        }
+
+        // var
+        {
+            TIMER = new Date()
+            B_DRAW = B_UPDATE = 0
+        }
+
+        // sound
+        {
+            if (!window.Audio) {
+                class Audio {
+                    constructor() { }
+                    play() { }
+                }
+                window.Audio = Audio
+            }
+            function bubble_pop() {
+                var tmp = new Audio('pop.wav')
+                tmp.play()
+            }
+        }
+
+        // particle
+        {
+            class Particle {
+                constructor(params = 0) {
+                    this.x = params.x || randrange(0, canvas.width)
+                    this.y = params.y || randrange(0, canvas.height)
+                    this.vx = params.vx || randrange(-RANDV, RANDV)
+                    this.vy = params.vy || randrange(-RANDV, RANDV)
+                    this.r = params.r || randrange(RR1, RR2)
+                    this.H = params.H || Math.random()
+                    this.timeLeft = randrange(TL1, TL2)
+
+                    var tmp = hsv2rgb(this.H)
+                    this.R = tmp[0]
+                    this.G = tmp[1]
+                    this.B = tmp[2]
+                }
+
+                update(index, dt) {
+                    // move
+                    this.x += this.vx * dt
+                    this.y += this.vy * dt
+
+                    // bounce
+                    if (
+                        (this.x < this.r && this.vx < 0)
+                        || (this.x > canvas.width - this.r && this.vx > 0)
+                    ) this.vx *= -1
+                    if (
+                        (this.y < this.r && this.vy < 0)
+                        || (this.y > canvas.height - this.r && this.vy > 0)
+                    ) this.vy *= -1
+
+                    // collide TODO
+
+                    // pop
+                    this.timeLeft -= dt
+                    if (this.timeLeft <= 0) return this
+                }
+
+                explode() {
+                    bubble_pop()
+                    if (this.r < MINR) return
+                    var total = this.r * this.r * 0.5
+                    for (var i = 3; i > 0 && total > MINR; i--) {
+                        var base = total / i,
+                            nr = Math.sqrt(Math.min(total, randrange(MINR * MINR, base * 3)))
+                        var nx = randrange(-this.r * 0.7, this.r * 0.7),
+                            ny = randrange(-this.r * 0.7, this.r * 0.7),
+                            d = Math.sqrt(nx * nx + ny * ny),
+                            vx = 0, vy = 0
+                        if (d != 0) {
+                            var rv = randrange(0, RANDV)
+                            vx = nx / d, vy = ny / d,
+                                vx *= rv; vy *= rv
+                        }
+
+                        var new_bubble = new Particle({
+                            r: nr,
+                            x: this.x + nx,
+                            y: this.y + ny,
+                            vx: vx, vy: vy,
+                            H: this.H + randrange(-DHUE, DHUE)
+                        })
+                        particles.push(new_bubble)
+                    }
+                }
+            }
+            window.Particle = Particle
+
+            particles = []
+            for (var i = 0; i < NPARTICLE; i++)particles.push(new Particle())
+        }
+
+        // draw
+        {
+            function drawRound(x, y, r, fill) {
+                pen.fillStyle = fill
+                pen.beginPath();
+                pen.arc(x, y, r, 0, Math.PI * 2, true);
+                pen.closePath();
+                pen.fill();
+            }
+            function drawBubble(x, y, r, R, G, B) {
+                var grd = pen.createRadialGradient(x, y, r * 0.6, x, y, r);
+                grd.addColorStop(0, `rgba(${R},${G},${B},0)`);
+                grd.addColorStop(0.999, `rgba(${R},${G},${B},${BUBBLE_ALPHA})`);
+                grd.addColorStop(1, `rgba(${R},${G},${B},0)`);
+                drawRound(x, y, r, grd)
+
+                var grd2 = pen.createRadialGradient(x, y - r * 0.15, r * 0.85, x, y + r * 0.5, r);
+                grd2.addColorStop(0, "#0f0f0f");
+                grd2.addColorStop(1, "#000000");
+                drawRound(x, y - r * 0.15, r * 0.85, grd2)
+
+                pen.save()
+                pen.translate(x - r * 0.55, y - r * 0.55)
+                pen.rotate(Math.PI / 4)
+                pen.scale(r * 0.1, r * 0.2)
+                drawRound(0, 0, 1, "#222222")
+                pen.restore()
+            }
+        }
+
+        // events
+        {
+            function update() {
+                var timer1 = new Date(),
+                    dt = (timer1 - TIMER) / 1000
+                var poppers = particles.map((b, i) => b.update(i, dt))
+                particles = particles.filter((t, i) => !poppers[i])
+                for (b of poppers) {
+                    b && b.explode()
+                }
+
+                TIMER = timer1
+                setTimeout(update, 15)
+                B_UPDATE++
+            }
+
+            function updateDraw() {
+                pen.clearRect(0, 0, canvas.width, canvas.height)
+                pen.globalCompositeOperation = "lighter"
+                particles.forEach(b => {
+                    drawBubble(b.x, b.y, b.r, b.R, b.G, b.B, 0.5)
+                })
+                requestAnimationFrame(updateDraw)
+                B_DRAW++
+            }
+
+            window.addEventListener('resize', e => {
+                canvas.width = window.innerWidth
+                canvas.height = window.innerHeight
+            })
+
+            window.addEventListener('load', () => {
+                update()
+                updateDraw()
+            })
+
+            window.addEventListener('click', e => {
+                var popped = 0
+                for (var b of particles) {
+                    if (Math.pow(b.x - e.clientX, 2) + Math.pow(b.y - e.clientY, 2) < b.r * b.r) {
+                        b.timeLeft = Math.min(b.timeLeft, Math.random() * 0.2)
+                        popped = 1
+                    }
+                }
+                if (popped) return
+                particles.push(new Particle({ x: e.clientX, y: e.clientY }))
+                bubble_pop()
+            })
+
+            function benchmark() {
+                document.getElementById('benchmark').innerHTML = `
+                UPDATE: ${B_UPDATE}<br>
+                DRAW: ${B_DRAW}<br>
+                PARTICLES: ${particles.length}
+                `
+                B_DRAW = B_UPDATE = 0
+                setTimeout(benchmark, 1000);
+            }
+            // benchmark()
+        }
+    </script>
+</body>
+
+</html>
