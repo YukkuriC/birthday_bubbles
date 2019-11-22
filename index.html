@@ -224,6 +224,19 @@
                 B_DRAW++
             }
 
+            function tapBubbles(x, y, rx = 0, ry = 0) {
+                var popped = 0
+                for (var b of particles) {
+                    if (Math.pow(b.x - x, 2) + Math.pow(b.y - y, 2) < (b.r + rx) * (b.r + ry)) {
+                        b.timeLeft = Math.min(b.timeLeft, Math.random() * 0.2)
+                        popped = 1
+                    }
+                }
+                if (popped) return
+                particles.push(new Particle({ x: x, y: y }))
+                bubble_pop()
+            }
+
             window.addEventListener('resize', e => {
                 canvas.width = window.innerWidth
                 canvas.height = window.innerHeight
@@ -234,17 +247,12 @@
                 updateDraw()
             })
 
-            window.addEventListener('click', e => {
-                var popped = 0
-                for (var b of particles) {
-                    if (Math.pow(b.x - e.clientX, 2) + Math.pow(b.y - e.clientY, 2) < b.r * b.r) {
-                        b.timeLeft = Math.min(b.timeLeft, Math.random() * 0.2)
-                        popped = 1
-                    }
+            window.addEventListener('click', e => tapBubbles(e.pageX, e.pageY))
+            window.addEventListener('touchstart', e => {
+                e.preventDefault()
+                for (var t of e.touches) {
+                    tapBubbles(t.pageX, t.pageY, t.radiusX, t.radiusY)
                 }
-                if (popped) return
-                particles.push(new Particle({ x: e.clientX, y: e.clientY }))
-                bubble_pop()
             })
 
             function benchmark() {
